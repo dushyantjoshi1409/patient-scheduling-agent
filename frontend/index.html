@@ -4,24 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>City Health Clinic — Scheduling</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app">
     <header class="header">
-      <h1>City Health Clinic</h1>
-      <p>Schedule, reschedule, or cancel your appointment</p>
+      <div class="header-icon">🏥</div>
+      <div class="header-text">
+        <h1>City Health Clinic</h1>
+        <p><span class="status-dot"></span>Online — ready to help you schedule</p>
+      </div>
+      <a href="/admin.html" style="color:rgba(255,255,255,0.8);font-size:0.78rem;text-decoration:none;margin-left:auto">Admin ↗</a>
     </header>
     <div class="chat-container" id="chat-container">
       <div class="message assistant">
-        <div class="message-content">
+        <div class="avatar">🏥</div>
+        <div class="bubble">
           Hello! I'm the City Health Clinic scheduling assistant. I can help you book, reschedule, or cancel an appointment. How can I help you today?
         </div>
       </div>
     </div>
     <form class="input-area" id="chat-form">
       <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" />
-      <button type="submit" id="send-btn">Send</button>
+      <button type="submit" id="send-btn">➤</button>
     </form>
   </div>
   <script src="app.js"></script>

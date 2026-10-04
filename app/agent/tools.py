@@ -1,4 +1,16 @@
-"""Tool implementations for the scheduling agent."""
+"""Tool declarations and async implementations for the scheduling agent.
+
+Defines 6 tools the scheduling agent can call via Groq's function calling:
+- search_doctors: Find doctors by name or specialty
+- check_availability: List open slots for a doctor on a date
+- book_appointment: Reserve a slot for a patient
+- cancel_appointment: Cancel an existing appointment
+- reschedule_appointment: Move an appointment to a new slot
+- get_appointment_details: Look up appointment info
+
+TOOL_DECLARATIONS holds OpenAI-compatible function schemas passed to Groq.
+TOOL_FUNCTIONS maps tool names to async implementations that query Postgres.
+"""
 import uuid
 from datetime import date as _date, time, datetime
 
@@ -113,6 +125,7 @@ TOOL_DECLARATIONS = [
 
 
 async def search_doctors(db: AsyncSession, query: str) -> str:
+    """Search doctors by name or specialty. Returns formatted list with IDs."""
     q = query.lower()
     result = await db.execute(select(Doctor))
     doctors = result.scalars().all()
@@ -128,6 +141,7 @@ async def search_doctors(db: AsyncSession, query: str) -> str:
 
 
 async def check_availability(db: AsyncSession, doctor_id: str, date: str = "", **kwargs) -> str:
+    """Check available slots for a doctor on a given date. Suggests nearby dates if none found."""
     date_str = date or kwargs.get("date_str", "")
     try:
         doc_uuid = uuid.UUID(doctor_id)
@@ -165,6 +179,7 @@ async def check_availability(db: AsyncSession, doctor_id: str, date: str = "", *
 
 
 async def book_appointment(db: AsyncSession, slot_id: str, patient_name: str, reason: str, session_id: str) -> str:
+    """Book an appointment: creates patient if needed, reserves the slot, returns confirmation."""
     try:
         slot_uuid = uuid.UUID(slot_id)
     except ValueError:
@@ -211,6 +226,7 @@ async def book_appointment(db: AsyncSession, slot_id: str, patient_name: str, re
 
 
 async def cancel_appointment(db: AsyncSession, appointment_id: str) -> str:
+    """Cancel an appointment and re-open its slot for others."""
     try:
         appt_uuid = uuid.UUID(appointment_id)
     except ValueError:
@@ -232,6 +248,7 @@ async def cancel_appointment(db: AsyncSession, appointment_id: str) -> str:
 
 
 async def reschedule_appointment(db: AsyncSession, appointment_id: str, new_slot_id: str) -> str:
+    """Move an appointment to a new slot: frees the old slot, reserves the new one."""
     try:
         appt_uuid = uuid.UUID(appointment_id)
         new_slot_uuid = uuid.UUID(new_slot_id)
@@ -269,6 +286,7 @@ async def reschedule_appointment(db: AsyncSession, appointment_id: str, new_slot
 
 
 async def get_appointment_details(db: AsyncSession, appointment_id: str) -> str:
+    """Look up full details of an existing appointment by ID."""
     try:
         appt_uuid = uuid.UUID(appointment_id)
     except ValueError:

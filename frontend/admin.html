@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — City Health Clinic</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Inter", -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      line-height: 1.5;
+    }
+    .topbar {
+      background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .topbar h1 { font-size: 1.2rem; font-weight: 700; }
+    .topbar a { color: rgba(255,255,255,0.85); text-decoration: none; font-size: 0.85rem; }
+    .topbar a:hover { color: white; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .stat-card .label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: 4px; color: #0f766e; }
+    .section { margin-bottom: 32px; }
+    .section h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-yellow { background: #fef3c7; color: #92400e; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      font-size: 0.88rem;
+    }
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      background: #f8fafc;
+      font-weight: 600;
+      color: #475569;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    td { padding: 12px 16px; border-top: 1px solid #f1f5f9; }
+    tr:hover td { background: #f8fafc; }
+    .empty { text-align: center; padding: 40px; color: #94a3b8; }
+    .actions { display: flex; gap: 8px; margin-bottom: 24px; }
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: #0f766e; color: white; }
+    .btn-primary:hover { background: #0d6d66; }
+    .btn-primary:disabled { background: #94a3b8; cursor: wait; }
+    .btn-outline { background: white; color: #0f766e; border: 2px solid #0f766e; }
+    .btn-outline:hover { background: #f0fdfa; }
+    .score-bar {
+      display: inline-block;
+      width: 60px;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    .score-bar .fill {
+      height: 100%;
+      border-radius: 4px;
+    }
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+    .tab {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      color: #64748b;
+      font-family: inherit;
+    }
+    .tab.active { background: #0f766e; color: white; }
+    .tab:hover:not(.active) { background: #e2e8f0; }
+    #eval-status { margin: 16px 0; padding: 16px; background: #f0fdfa; border-radius: 8px; display: none; }
+    .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .arch-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .arch-card h3 { font-size: 0.95rem; margin-bottom: 8px; color: #0f766e; }
+    .arch-card p { font-size: 0.85rem; color: #475569; }
+    .arch-card .model { font-weight: 600; color: #1e293b; }
+    @media (max-width: 768px) {
+      .container { padding: 16px; }
+      .arch-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>🏥 Admin Dashboard</h1>
+    <a href="/">← Back to Chat</a>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('overview')">Overview</button>
+      <button class="tab" onclick="showTab('appointments')">Appointments</button>
+      <button class="tab" onclick="showTab('eval')">Eval Pipeline</button>
+      <button class="tab" onclick="showTab('architecture')">Architecture</button>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="tab-overview" class="tab-content">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="section">
+        <h2>Recent Appointments</h2>
+        <table id="recent-appts-table">
+          <thead>
+            <tr><th>Patient</th><th>Doctor</th><th>Date</th><th>Time</th><th>Reason</th><th>Status</th></tr>
+          </thead>
+          <tbody id="recent-appts-body">
+            <tr><td colspan="6" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Appointments Tab -->
+    <div id="tab-appointments" class="tab-content" style="display:none">
+      <div class="section">
+        <h2>All Appointments</h2>
+        <table>
+          <thead>
+            <tr><th>Patient</th><th>Doctor</th><th>Specialty</th><th>Date</th><th>Time</th><th>Reason</th><th>Status</th><th>Booked At</th></tr>
+          </thead>
+          <tbody id="all-appts-body">
+            <tr><td colspan="8" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Eval Tab -->
+    <div id="tab-eval" class="tab-content" style="display:none">
+      <div class="section">
+        <h2>Eval & Self-Improvement Pipeline</h2>
+        <p style="color:#64748b;margin-bottom:16px;font-size:0.9rem">
+          Run the full loop: baseline eval → analyze failures → patch prompt → re-run → compare scores.
+        </p>
+        <div class="actions">
+          <button class="btn btn-primary" id="run-eval-btn" onclick="runEval()">▶ Run Eval Suite</button>
+          <button class="btn btn-primary" id="run-improve-btn" onclick="runImprove()">🔄 Run Improvement Loop</button>
+          <button class="btn btn-outline" onclick="loadEvalRuns()">↻ Refresh Results</button>
+        </div>
+        <div id="eval-status"></div>
+      </div>
+      <div class="section">
+        <h2>Prompt Versions</h2>
+        <table>
+          <thead>
+            <tr><th>Version</th><th>Description</th><th>Prompt Length</th><th>Created</th></tr>
+          </thead>
+          <tbody id="prompt-body">
+            <tr><td colspan="4" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section" style="margin-top:24px">
+        <h2>Eval Runs</h2>
+        <table>
+          <thead>
+            <tr><th>Version</th><th>Scenario</th><th>Score</th><th>Result</th><th>Analysis</th><th>When</th></tr>
+          </thead>
+          <tbody id="eval-body">
+            <tr><td colspan="6" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Architecture Tab -->
+    <div id="tab-architecture" class="tab-content" style="display:none">
+      <div class="section">
+        <h2>System Architecture — 3 Agents</h2>
+        <div class="arch-grid">
+          <div class="arch-card">
+            <h3>🤖 Scheduling Agent</h3>
+            <p class="model">Gemini 3.8 Flash (Google)</p>
+            <p>The main conversational agent. Handles patient requests, calls 6 tools (search doctors, check availability, book/cancel/reschedule appointments), maintains multi-turn state.</p>
+            <p style="margin-top:8px"><strong>Why Gemini?</strong> Free tier, native function calling, fast inference. Flash variant balances cost and quality.</p>
+          </div>
+          <div class="arch-card">
+            <h3>🎭 Simulated Patient</h3>
+            <p class="model">Qwen 3.8 27B (Groq)</p>
+            <p>Plays the patient role during eval. Follows persona scripts (frustrated patient, vague requester, emergency case, etc.) and responds naturally in conversation.</p>
+            <p style="margin-top:8px"><strong>Why Groq/Qwen?</strong> Different provider than the agent — avoids self-evaluation bias. Groq's speed makes multi-turn eval fast. Smaller model keeps patient responses natural and concise.</p>
+          </div>
+          <div class="arch-card">
+            <h3>⚖️ Eval Judge</h3>
+            <p class="model">Qwen 3.8 27B (Groq)</p>
+            <p>Reads full transcripts and scores on 5 dimensions (Task Completion, Safety, Conversation Quality, Tool Use, Guardrail Compliance). Each 1-5, total /25.</p>
+            <p style="margin-top:8px"><strong>Why separate judge?</strong> Cross-model evaluation is more objective than self-assessment. Reliable structured JSON output.</p>
+          </div>
+          <div class="arch-card">
+            <h3>🔧 Prompt Improver</h3>
+            <p class="model">Qwen 3.8 27B (Groq)</p>
+            <p>Analyzes failure patterns → identifies root causes → generates surgical prompt patches → preserves safety guardrails. Writes new prompt versions to DB.</p>
+            <p style="margin-top:8px"><strong>Why?</strong> Closes the self-improvement loop. Before/after comparison catches regressions.</p>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <h2>Tech Stack</h2>
+        <div class="arch-grid">
+          <div class="arch-card">
+            <h3>Backend</h3>
+            <p><strong>FastAPI</strong> — async Python, auto-docs at /docs<br>
+            <strong>SQLAlchemy</strong> — async ORM with asyncpg driver<br>
+            <strong>PostgreSQL 16</strong> — conversations stored as JSONB<br>
+            <strong>Pydantic</strong> — request/response validation</p>
+          </div>
+          <div class="arch-card">
+            <h3>Agent Tools (6)</h3>
+            <p><strong>search_doctors</strong> — by name or specialty<br>
+            <strong>check_availability</strong> — for doctor + date range<br>
+            <strong>book_appointment</strong> — creates booking<br>
+            <strong>cancel_appointment</strong> — by appointment ID<br>
+            <strong>reschedule_appointment</strong> — cancel + rebook<br>
+            <strong>get_appointment_details</strong> — lookup by ID</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + name).style.display = 'block';
+      event.target.classList.add('active');
+    }
+
+    function statusBadge(status) {
+      const colors = { scheduled: 'green', cancelled: 'red', completed: 'blue', no_show: 'yellow' };
+      return `<span class="badge badge-${colors[status] || 'blue'}">${status}</span>`;
+    }
+
+    function scoreBar(score, max) {
+      const pct = (score / max) * 100;
+      const color = pct >= 72 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#ef4444';
+      return `<span class="score-bar"><span class="fill" style="width:${pct}%;background:${color}"></span></span>${score}/${max}`;
+    }
+
+    function timeAgo(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    }
+
+    async function loadStats() {
+      const res = await fetch('/api/admin/stats');
+      const s = res.ok ? await res.json() : {};
+      const grid = document.getElementById('stats-grid');
+      grid.innerHTML = [
+        ['Doctors', s.doctors],
+        ['Patients', s.patients],
+        ['Appointments', s.appointments],
+        ['Conversations', s.conversations],
+        ['Eval Runs', s.eval_runs],
+        ['Prompt Versions', s.prompt_versions],
+      ].map(([label, value]) => `
+        <div class="stat-card">
+          <div class="label">${label}</div>
+          <div class="value">${value || 0}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadAppointments() {
+      const res = await fetch('/api/admin/appointments');
+      const appts = res.ok ? await res.json() : [];
+      const renderRows = (data) => data.length === 0
+        ? '<tr><td colspan="8" class="empty">No appointments yet. Try booking one in the chat!</td></tr>'
+        : data.map(a => `<tr>
+            <td>${a.patient_name}</td>
+            <td>${a.doctor_name}</td>
+            <td>${a.specialty}</td>
+            <td>${a.date}</td>
+            <td>${a.start_time} – ${a.end_time}</td>
+            <td>${a.reason || '—'}</td>
+            <td>${statusBadge(a.status)}</td>
+            <td>${timeAgo(a.created_at)}</td>
+          </tr>`).join('');
+
+      document.getElementById('all-appts-body').innerHTML = renderRows(appts);
+      document.getElementById('recent-appts-body').innerHTML = appts.length === 0
+        ? '<tr><td colspan="6" class="empty">No appointments yet</td></tr>'
+        : appts.slice(0, 5).map(a => `<tr>
+            <td>${a.patient_name}</td>
+            <td>${a.doctor_name}</td>
+            <td>${a.date}</td>
+            <td>${a.start_time} – ${a.end_time}</td>
+            <td>${a.reason || '—'}</td>
+            <td>${statusBadge(a.status)}</td>
+          </tr>`).join('');
+    }
+
+    async function loadEvalRuns() {
+      const [runsRes, promptsRes] = await Promise.all([
+        fetch('/api/admin/eval-runs'),
+        fetch('/api/admin/prompt-versions'),
+      ]);
+      const runs = runsRes.ok ? await runsRes.json() : [];
+      const prompts = promptsRes.ok ? await promptsRes.json() : [];
+
+      document.getElementById('eval-body').innerHTML = runs.length === 0
+        ? '<tr><td colspan="6" class="empty">No eval runs yet. Click "Run Eval Suite" to start!</td></tr>'
+        : runs.map(r => `<tr>
+            <td><span class="badge badge-blue">${r.prompt_version}</span></td>
+            <td>${r.scenario_name}</td>
+            <td>${scoreBar(r.total_score, 25)}</td>
+            <td>${r.passed ? '<span class="badge badge-green">PASS</span>' : '<span class="badge badge-red">FAIL</span>'}</td>
+            <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.failure_analysis||'').replace(/"/g,'&quot;')}">${r.failure_analysis || '—'}</td>
+            <td>${timeAgo(r.created_at)}</td>
+          </tr>`).join('');
+
+      document.getElementById('prompt-body').innerHTML = prompts.length === 0
+        ? '<tr><td colspan="4" class="empty">No prompt versions</td></tr>'
+        : prompts.map(p => `<tr>
+            <td><span class="badge badge-blue">${p.version}</span></td>
+            <td>${p.change_description || '—'}</td>
+            <td>${p.prompt_length} chars</td>
+            <td>${timeAgo(p.created_at)}</td>
+          </tr>`).join('');
+    }
+
+    async function runEval() {
+      const btn = document.getElementById('run-eval-btn');
+      const status = document.getElementById('eval-status');
+      btn.disabled = true;
+      btn.textContent = '⏳ Running 8 scenarios...';
+      status.style.display = 'block';
+      status.innerHTML = '⏳ Running eval suite against current prompt version. This takes 2-3 minutes (8 scenarios × multi-turn conversations)...';
+
+      try {
+        const res = await fetch('/api/eval/run', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const passed = data.results.filter(r => r.passed).length;
+        status.innerHTML = `✅ Done! ${passed}/${data.results.length} scenarios passed. See results below.`;
+        await loadEvalRuns();
+        await loadStats();
+      } catch (e) {
+        status.innerHTML = `❌ Error: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Run Eval Suite';
+      }
+    }
+
+    async function runImprove() {
+      const btn = document.getElementById('run-improve-btn');
+      const status = document.getElementById('eval-status');
+      btn.disabled = true;
+      btn.textContent = '⏳ Running improvement loop...';
+      status.style.display = 'block';
+      status.innerHTML = '⏳ Full improvement loop: baseline eval → failure analysis → prompt patch → re-run all → compare. This takes 5-8 minutes...';
+
+      try {
+        const res = await fetch('/api/eval/improve', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        let html = `<h3 style="margin-bottom:8px">Improvement Results: ${data.old_version} → ${data.new_version}</h3><table style="margin-top:8px"><thead><tr><th>Scenario</th><th>Before</th><th>After</th><th>Change</th></tr></thead><tbody>`;
+        for (const name of Object.keys(data.old_scores)) {
+          const old = data.old_scores[name] || 0;
+          const nw = data.new_scores[name] || 0;
+          const delta = nw - old;
+          const color = delta > 0 ? '#16a34a' : delta < 0 ? '#ef4444' : '#64748b';
+          html += `<tr><td>${name}</td><td>${old}/25</td><td>${nw}/25</td><td style="color:${color};font-weight:600">${delta > 0 ? '+' : ''}${delta}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        if (data.regressions.length) html += `<p style="color:#ef4444;margin-top:8px">⚠️ Regressions: ${data.regressions.join(', ')}</p>`;
+        if (data.improvements.length) html += `<p style="color:#16a34a;margin-top:4px">✅ Improvements: ${data.improvements.join(', ')}</p>`;
+        status.innerHTML = html;
+
+        await loadEvalRuns();
+        await loadStats();
+      } catch (e) {
+        status.innerHTML = `❌ Error: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Run Improvement Loop';
+      }
+    }
+
+    loadStats();
+    loadAppointments();
+    loadEvalRuns();
+  </script>
+</body>
+</html>

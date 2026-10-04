@@ -1,4 +1,15 @@
-"""Eval scenarios — each defines a simulated patient persona and expected behavior."""
+"""Eval scenarios — 8 test cases covering happy paths and edge cases.
+
+Each scenario defines:
+- name: Human-readable label
+- persona: Character instructions for the simulated patient agent
+- expected_behavior: Checklist the LLM judge scores against
+- min_score: Pass threshold out of 25 (5 dimensions × 5 max each)
+
+Scenarios range from simple bookings to adversarial cases (emergency
+redirect, out-of-scope medical advice, frustrated patient, mid-conversation
+mind changes) to thoroughly test the scheduling agent's robustness.
+"""
 
 SCENARIOS = {
     "simple_booking": {

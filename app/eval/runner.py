@@ -1,6 +1,16 @@
-"""Eval runner — orchestrates scenarios, scoring, and the improvement loop."""
+"""Eval runner — orchestrates scenarios, scoring, and the self-improvement loop.
+
+Three main entry points:
+- run_single_scenario(): Run one eval scenario end-to-end
+- run_eval_suite(): Run all (or selected) scenarios and store results
+- run_improvement_loop(): Full cycle — baseline eval → analyze failures →
+  patch prompt → re-eval → compare before/after scores
+
+Each scenario simulates a multi-turn patient conversation (up to 12 turns),
+scores it with the LLM judge, and stores results in the eval_runs table.
+"""
 import uuid
-import time
+import asyncio
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +42,21 @@ async def run_single_scenario(
     prompt_version: str,
     system_prompt: str,
 ) -> EvalRun:
+    """Run one eval scenario: simulate a patient conversation, then score it.
+
+    Creates a simulated multi-turn conversation between the patient agent
+    and scheduling agent (up to MAX_TURNS), then passes the transcript to
+    the LLM judge for scoring on 5 dimensions.
+
+    Args:
+        db: Async DB session (slots are reset before each scenario).
+        scenario_key: Key into SCENARIOS dict (e.g., 'simple_booking').
+        prompt_version: Version label for tracking (e.g., 'v1').
+        system_prompt: The system prompt text to use for the scheduling agent.
+
+    Returns:
+        The persisted EvalRun record with scores and transcript.
+    """
     scenario = SCENARIOS[scenario_key]
     session_id = f"eval-{scenario_key}-{uuid.uuid4().hex[:8]}"
     history = []
@@ -60,7 +85,7 @@ async def run_single_scenario(
         if "[END]" in patient_msg:
             break
 
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
 
         agent_response, history_for_agent = await run_agent_turn(
             db=db,
@@ -106,6 +131,18 @@ async def run_eval_suite(
     scenario_names: list[str] | None = None,
     prompt_version: str | None = None,
 ) -> list[EvalRun]:
+    """Run the full eval suite (all or selected scenarios).
+
+    Args:
+        db: Async DB session.
+        scenario_names: Optional list of scenario keys to run. Defaults
+            to all scenarios in SCENARIOS.
+        prompt_version: Optional version to test. Defaults to the latest
+            prompt version in the database.
+
+    Returns:
+        List of EvalRun records, one per scenario.
+    """
     if not prompt_version:
         result = await db.execute(
             select(PromptVersion).order_by(PromptVersion.id.desc()).limit(1)
@@ -131,12 +168,25 @@ async def run_eval_suite(
             continue
         run = await run_single_scenario(db, key, prompt_version, system_prompt)
         results.append(run)
-        time.sleep(1)
+        await asyncio.sleep(1)
 
     return results
 
 
 async def run_improvement_loop(db: AsyncSession) -> dict:
+    """Run the full self-improvement loop: eval → analyze → patch → re-eval.
+
+    Steps:
+    1. Run baseline eval with current prompt version
+    2. Analyze failures with the LLM improver agent
+    3. Generate an improved prompt and save it as a new version
+    4. Re-run ALL scenarios with the new prompt
+    5. Compare scores, flag regressions and improvements
+
+    Returns:
+        Dict with old_version, new_version, old_scores, new_scores,
+        regressions list, and improvements list.
+    """
     result = await db.execute(
         select(PromptVersion).order_by(PromptVersion.id.desc()).limit(1)
     )

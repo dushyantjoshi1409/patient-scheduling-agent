@@ -1,83 +1,93 @@
-"""Scheduling agent powered by Gemini Flash with function calling.
+"""Core scheduling agent powered by Groq (Qwen 3.8 27B) with function calling.
 
-Uses Gemini Chat sessions which handle thought signatures automatically.
-Tries multiple models with retry on transient errors.
+This is the main conversational agent that patients interact with. It uses
+Groq's OpenAI-compatible API with native tool/function calling to search
+doctors, check availability, book/cancel/reschedule appointments.
+
+Architecture:
+- Receives user messages via the /api/chat endpoint
+- Maintains conversation history in OpenAI message format
+- Calls tools (DB queries) via Groq's function calling, up to 5 rounds
+- All calls are traced via Langfuse for observability
+
+Model choice: qwen/qwen3.8-27b on Groq free tier (200K tokens/day).
+Eval agents use allam-2-7b separately to avoid sharing this quota.
 """
+import json
 import time
 from datetime import date
 
-from google import genai
-from google.genai import types
-from google.genai.errors import ServerError, ClientError
+from groq import Groq
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.agent.prompts import SYSTEM_PROMPT_V1
 from app.agent.tools import TOOL_DECLARATIONS, TOOL_FUNCTIONS
+from app.tracing import langfuse
 
 
-client = genai.Client(api_key=settings.google_api_key)
-MODELS = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
+groq_client = Groq(api_key=settings.groq_api_key)
+MODEL = "qwen/qwen3.8-27b"
 
 
-def _build_tools() -> list[types.Tool]:
-    function_declarations = []
-    for tool in TOOL_DECLARATIONS:
-        fd = types.FunctionDeclaration(
-            name=tool["name"],
-            description=tool["description"],
-            parameters=tool["parameters"],
-        )
-        function_declarations.append(fd)
-    return [types.Tool(function_declarations=function_declarations)]
+def _build_tools() -> list[dict]:
+    """Convert tool declarations into OpenAI-style function tool format.
+
+    Wraps each tool declaration dict from tools.py in the
+    {"type": "function", "function": {...}} envelope that Groq expects.
+    """
+    return [
+        {"type": "function", "function": decl}
+        for decl in TOOL_DECLARATIONS
+    ]
 
 
 def _build_system_prompt(system_prompt_text: str | None = None) -> str:
+    """Build the system prompt with today's date injected.
+
+    Args:
+        system_prompt_text: Custom prompt text (used during eval with
+            improved prompt versions). Falls back to SYSTEM_PROMPT_V1.
+
+    Returns:
+        The system prompt with {today} replaced by the current date.
+    """
     text = system_prompt_text or SYSTEM_PROMPT_V1
     return text.format(today=date.today().isoformat())
 
 
-def _history_to_contents(history: list[dict]) -> list[types.Content]:
-    contents = []
+def _history_to_messages(history: list[dict]) -> list[dict]:
+    """Convert stored conversation history to OpenAI-style messages.
+
+    The history is stored in a normalized format with role, content,
+    and optional tool_calls/tool_call_id fields. This function converts
+    it to the exact format Groq's API expects.
+
+    Args:
+        history: List of message dicts with 'role' (user/assistant/tool),
+            'content', and optionally 'tool_calls' or 'tool_call_id'.
+
+    Returns:
+        List of OpenAI-format message dicts ready for the API.
+    """
+    messages = []
     for msg in history:
         role = msg["role"]
         if role == "user":
-            contents.append(types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=msg["content"])]
-            ))
+            messages.append({"role": "user", "content": msg["content"]})
         elif role == "assistant":
-            parts = []
-            if msg.get("content"):
-                parts.append(types.Part.from_text(text=msg["content"]))
-            if msg.get("function_calls"):
-                for fc in msg["function_calls"]:
-                    parts.append(types.Part.from_function_call(
-                        name=fc["name"], args=fc["args"]
-                    ))
-            if parts:
-                contents.append(types.Content(role="model", parts=parts))
+            m = {"role": "assistant", "content": msg.get("content") or ""}
+            if msg.get("tool_calls"):
+                m["tool_calls"] = msg["tool_calls"]
+            messages.append(m)
         elif role == "tool":
-            contents.append(types.Content(
-                role="user",
-                parts=[types.Part.from_function_response(
-                    name=msg["name"],
-                    response={"result": msg["content"]}
-                )]
-            ))
-    return contents
-
-
-def _send_with_retry(chat, message, max_retries=5):
-    for attempt in range(max_retries):
-        try:
-            return chat.send_message(message)
-        except ServerError:
-            if attempt == max_retries - 1:
-                raise
-            wait = min(2 ** attempt * 3, 30)
-            time.sleep(wait)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": msg.get("tool_call_id", ""),
+                "content": msg["content"],
+            })
+    return messages
 
 
 async def run_agent_turn(
@@ -86,48 +96,112 @@ async def run_agent_turn(
     user_message: str,
     history: list[dict],
     system_prompt_text: str | None = None,
+    trace_name: str = "scheduling-agent",
 ) -> tuple[str, list[dict]]:
-    system_prompt = _build_system_prompt(system_prompt_text)
-    tools = _build_tools()
-    config = types.GenerateContentConfig(
-        system_instruction=system_prompt,
-        tools=tools,
-        temperature=0.3,
+    """Run one conversational turn of the scheduling agent.
+
+    Sends the user's message (with full conversation history) to Groq,
+    handles any tool calls the model makes (up to 5 rounds of tool
+    calling), and returns the final text response.
+
+    Args:
+        db: Async SQLAlchemy session for tool DB queries.
+        session_id: UUID identifying the chat session (used for
+            patient identity in bookings).
+        user_message: The patient's latest message.
+        history: Conversation history so far (mutated — a copy is made).
+        system_prompt_text: Optional custom system prompt for eval runs.
+        trace_name: Langfuse trace name for observability grouping.
+
+    Returns:
+        Tuple of (assistant_response_text, updated_history).
+        The updated history includes the new user message, any tool
+        calls/results, and the final assistant response.
+    """
+    trace = langfuse.start_observation(
+        name=trace_name,
+        as_type="span",
+        input={"user_message": user_message, "history_length": len(history)},
+        metadata={"session_id": session_id},
     )
 
-    previous_contents = _history_to_contents(history)
-
-    last_error = None
-    chat = None
-    for model in MODELS:
-        try:
-            chat = client.chats.create(model=model, config=config, history=previous_contents)
-            response = _send_with_retry(chat, user_message)
-            break
-        except (ClientError, ServerError) as e:
-            last_error = e
-            time.sleep(1)
-            continue
-
-    if chat is None or last_error and response is None:
-        raise last_error or RuntimeError("All models unavailable")
+    system_prompt = _build_system_prompt(system_prompt_text)
+    tools = _build_tools()
 
     updated_history = list(history)
     updated_history.append({"role": "user", "content": user_message})
 
-    max_tool_rounds = 5
-    for _ in range(max_tool_rounds):
-        candidate = response.candidates[0]
-        has_function_call = False
-        function_responses = []
-        text_parts = []
+    api_messages = [{"role": "system", "content": system_prompt}]
+    api_messages.extend(_history_to_messages(updated_history))
 
-        for part in candidate.content.parts:
-            if part.function_call:
-                has_function_call = True
-                fc = part.function_call
-                fn_name = fc.name
-                fn_args = dict(fc.args) if fc.args else {}
+    max_tool_rounds = 5
+    for round_num in range(max_tool_rounds):
+        gen = langfuse.start_observation(
+            name="groq-call",
+            as_type="generation",
+            model=MODEL,
+            input={"user_message": user_message, "round": round_num},
+            metadata={"agent": "scheduling-agent"},
+        )
+
+        try:
+            response = groq_client.chat.completions.create(
+                model=MODEL,
+                messages=api_messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.3,
+                max_tokens=1024,
+            )
+        except Exception as e:
+            gen.update(output={"error": str(e)}, level="ERROR")
+            gen.end()
+            trace.update(output={"error": str(e)}, level="ERROR")
+            trace.end()
+            raise
+
+        gen.update(
+            output={"finish_reason": response.choices[0].finish_reason},
+            usage_details={
+                "input": response.usage.prompt_tokens if response.usage else 0,
+                "output": response.usage.completion_tokens if response.usage else 0,
+            },
+        )
+        gen.end()
+
+        choice = response.choices[0]
+
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            assistant_msg = {
+                "role": "assistant",
+                "content": choice.message.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in choice.message.tool_calls
+                ],
+            }
+            updated_history.append(assistant_msg)
+            api_messages.append(assistant_msg)
+
+            for tc in choice.message.tool_calls:
+                fn_name = tc.function.name
+                try:
+                    fn_args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    fn_args = {}
+
+                tool_span = langfuse.start_observation(
+                    name=f"tool:{fn_name}",
+                    as_type="span",
+                    input={"function": fn_name, "args": fn_args, "round": round_num},
+                )
 
                 tool_fn = TOOL_FUNCTIONS.get(fn_name)
                 if tool_fn:
@@ -138,26 +212,26 @@ async def run_agent_turn(
                 else:
                     result = f"Unknown tool: {fn_name}"
 
-                function_responses.append(types.Part.from_function_response(
-                    name=fn_name,
-                    response={"result": result},
-                ))
+                tool_span.update(output={"result": result[:500]})
+                tool_span.end()
 
-                updated_history.append({
-                    "role": "assistant", "content": "",
-                    "function_calls": [{"name": fn_name, "args": fn_args}]
-                })
-                updated_history.append({
-                    "role": "tool", "name": fn_name, "content": result
-                })
-            elif part.text:
-                text_parts.append(part.text)
+                tool_msg = {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                }
+                updated_history.append(tool_msg)
+                api_messages.append(tool_msg)
 
-        if not has_function_call:
-            assistant_text = " ".join(text_parts).strip()
-            updated_history.append({"role": "assistant", "content": assistant_text})
-            return assistant_text, updated_history
+            continue
 
-        response = _send_with_retry(chat, function_responses)
+        assistant_text = (choice.message.content or "").strip()
+        updated_history.append({"role": "assistant", "content": assistant_text})
+        trace.update(output={"response": assistant_text[:500], "tool_rounds": round_num, "model": MODEL})
+        trace.end()
+        return assistant_text, updated_history
 
-    return "I apologize, but I'm having trouble processing your request. Could you please try again?", updated_history
+    fallback = "I apologize, but I'm having trouble processing your request. Could you please try again?"
+    trace.update(output={"response": fallback, "error": "max_tool_rounds_exceeded"}, level="WARNING")
+    trace.end()
+    return fallback, updated_history

@@ -48,6 +48,22 @@ async def chat(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     return ChatResponse(response=response_text, session_id=req.session_id)
 
 
+@router.get("/chat/{session_id}")
+async def get_chat_history(session_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Conversation).where(Conversation.session_id == session_id)
+    )
+    convo = result.scalar_one_or_none()
+    if not convo or not convo.messages:
+        return {"messages": []}
+    visible = [
+        {"role": m["role"], "content": m.get("content", "")}
+        for m in convo.messages
+        if m["role"] in ("user", "assistant") and m.get("content")
+    ]
+    return {"messages": visible}
+
+
 @router.delete("/chat/{session_id}")
 async def clear_chat(session_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(

@@ -1,3 +1,12 @@
+"""System prompts for the scheduling agent.
+
+SYSTEM_PROMPT_V1 is the baseline prompt. The self-improvement loop
+generates new versions (v2, v3, ...) stored in the prompt_versions
+table, each addressing failures found in the eval pipeline.
+
+The {today} placeholder is injected at runtime with the current date.
+"""
+
 SYSTEM_PROMPT_V1 = """You are a scheduling assistant for City Health Clinic. Your role is to help patients book, reschedule, and cancel appointments with our doctors.
 
 ## Core Responsibilities

@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db, async_session
 from app.seed import seed_database
+from app.tracing import langfuse
 from app.routers import chat, doctors, appointments, eval
 
 
@@ -16,6 +17,7 @@ async def lifespan(app: FastAPI):
     async with async_session() as db:
         await seed_database(db)
     yield
+    langfuse.flush()
 
 
 app = FastAPI(title="City Health Clinic Scheduling Agent", lifespan=lifespan)
