@@ -1,0 +1,17 @@
+.env
+.git
+.gitignore
+.DS_Store
+__pycache__
+*.pyc
+.venv
+venv
+*.egg-info
+dist
+build
+.pytest_cache
+node_modules
+docker-compose.yml
+DESIGN.md
+README.md
+tmp/
