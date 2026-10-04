@@ -151,14 +151,34 @@ async def run_agent_turn(
                 tools=tools,
                 tool_choice="auto",
                 temperature=0.3,
-                max_tokens=1024,
+                max_tokens=900,
             )
         except Exception as e:
-            gen.update(output={"error": str(e)}, level="ERROR")
-            gen.end()
-            trace.update(output={"error": str(e)}, level="ERROR")
-            trace.end()
-            raise
+            error_msg = str(e)
+            if "429" in error_msg or "rate_limit" in error_msg:
+                gen.update(output={"error": "rate_limited", "retry": True}, level="WARNING")
+                gen.end()
+                import asyncio
+                await asyncio.sleep(2)
+                try:
+                    response = groq_client.chat.completions.create(
+                        model=MODEL,
+                        messages=api_messages,
+                        tools=tools,
+                        tool_choice="auto",
+                        temperature=0.3,
+                        max_tokens=900,
+                    )
+                except Exception as retry_e:
+                    trace.update(output={"error": str(retry_e)}, level="ERROR")
+                    trace.end()
+                    raise
+            else:
+                gen.update(output={"error": error_msg}, level="ERROR")
+                gen.end()
+                trace.update(output={"error": error_msg}, level="ERROR")
+                trace.end()
+                raise
 
         gen.update(
             output={"finish_reason": response.choices[0].finish_reason},
