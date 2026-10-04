@@ -13,7 +13,9 @@ Architecture:
 Model choice: qwen/qwen3.8-27b on Groq free tier (200K tokens/day).
 Eval agents use allam-2-7b separately to avoid sharing this quota.
 """
+import asyncio
 import json
+import re
 import time
 from datetime import date
 
@@ -25,6 +27,20 @@ from app.config import settings
 from app.agent.prompts import SYSTEM_PROMPT_V1
 from app.agent.tools import TOOL_DECLARATIONS, TOOL_FUNCTIONS
 from app.tracing import langfuse
+
+
+def _parse_retry_seconds(error_msg: str) -> float:
+    """Extract the retry wait time from a Groq rate-limit error message.
+
+    Parses patterns like 'try again in 4m12.287s' or 'try again in 30.5s'.
+    Returns seconds to wait, defaulting to 10 if parsing fails.
+    """
+    match = re.search(r"try again in (?:(\d+)m)?(\d+(?:\.\d+)?)s", error_msg)
+    if match:
+        minutes = int(match.group(1) or 0)
+        seconds = float(match.group(2))
+        return minutes * 60 + seconds
+    return 10.0
 
 
 groq_client = Groq(api_key=settings.groq_api_key)
@@ -156,10 +172,14 @@ async def run_agent_turn(
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg or "rate_limit" in error_msg:
-                gen.update(output={"error": "rate_limited", "retry": True}, level="WARNING")
+                wait = _parse_retry_seconds(error_msg)
+                gen.update(
+                    output={"error": "rate_limited", "wait_seconds": wait},
+                    level="WARNING",
+                )
                 gen.end()
-                import asyncio
-                await asyncio.sleep(2)
+                print(f"[rate-limit] waiting {wait:.0f}s before retry...")
+                await asyncio.sleep(wait)
                 try:
                     response = groq_client.chat.completions.create(
                         model=MODEL,
