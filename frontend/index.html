@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City Health Clinic — Scheduling</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>City Health Clinic</h1>
+      <p>Schedule, reschedule, or cancel your appointment</p>
+    </header>
+    <div class="chat-container" id="chat-container">
+      <div class="message assistant">
+        <div class="message-content">
+          Hello! I'm the City Health Clinic scheduling assistant. I can help you book, reschedule, or cancel an appointment. How can I help you today?
+        </div>
+      </div>
+    </div>
+    <form class="input-area" id="chat-form">
+      <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" />
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
